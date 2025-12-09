@@ -1,0 +1,5 @@
+FROM maildev/maildev:2.1.0
+
+EXPOSE 1080 1025
+
+CMD ["maildev", "--web", "1080", "--smtp", "1025"]

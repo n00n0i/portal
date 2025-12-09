@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Settings, LogOut, Trash2, Edit, Check, X, AlertCircle, Info } from 'lucide-react';
 import { Button } from './Button';
 
+type Tab = 'colors' | 'buttons' | 'badges' | 'inputs' | 'icons';
+
 export const DesignSystem: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'colors' | 'buttons' | 'badges' | 'inputs' | 'icons'>('colors');
+  const tabs: Tab[] = useMemo(() => ['colors', 'buttons', 'badges', 'inputs', 'icons'], []);
+  const [activeTab, setActiveTab] = useState<Tab>('colors');
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl animate-fade-in">
@@ -19,10 +22,10 @@ export const DesignSystem: React.FC = () => {
       {/* Tabs */}
       <div className="border-b border-slate-800 bg-slate-950/50">
         <div className="flex">
-          {['colors', 'buttons', 'badges', 'inputs', 'icons'].map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as any)}
+              onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 font-medium text-sm transition-all border-b-2 ${
                 activeTab === tab
                   ? 'text-indigo-400 border-indigo-500'
