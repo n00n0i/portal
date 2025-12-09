@@ -3,6 +3,7 @@ import { Button } from './Button';
 import { User, AuthResponse } from '../types';
 import * as storageService from '../services/storageService';
 import { KeyRound, Mail, User as UserIcon, ArrowLeft, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface AuthScreensProps {
   onLogin: (user: User) => void;
@@ -15,6 +16,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
   const [error, setError] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
+  const { t } = useI18n();
   
   // Form States
   const [email, setEmail] = useState('');
@@ -35,38 +37,42 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
     setView(v);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    const res = storageService.login(email, password);
+    const res = await storageService.login(email, password);
     if (res.success && res.user) {
       onLogin(res.user);
     } else {
-      setError(res.message || 'Login failed');
+      setError(res.message || t('login'));
     }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
 
-    const res = storageService.signup(name, email, password);
+    const res = await storageService.signup(name, email, password);
     if (res.success) {
       setSuccessMsg(res.message || 'Success');
       // Optional: switch to login after delay
       setTimeout(() => switchView('login'), 2000);
     } else {
-      setError(res.message || 'Signup failed');
+      setError(res.message || t('signup'));
     }
   };
 
-  const handleForgotPassword = (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock functionality
-    setSuccessMsg(`If an account exists for ${email}, a reset link has been sent.`);
     setError('');
+    const res = await storageService.resetPassword(email);
+    if (res.success && res.tempPassword) {
+      setSuccessMsg(`Temporary password: ${res.tempPassword}`);
+    } else {
+      setError(res.message || t('resetPassword'));
+    }
   };
 
   return (
@@ -81,11 +87,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                 <div className="mx-auto w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/20">
                     <ShieldCheck className="w-7 h-7 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-1">Portal Access</h2>
+                <h2 className="text-2xl font-bold text-white mb-1">{t('portal')}</h2>
                 <p className="text-slate-400 text-sm">
-                    {view === 'login' && 'Sign in to access your apps'}
-                    {view === 'signup' && 'Create an account'}
-                    {view === 'forgot-password' && 'Recover your account'}
+                    {view === 'login' && t('welcome')}
+                    {view === 'signup' && t('createAccount')}
+                    {view === 'forgot-password' && t('resetPassword')}
                 </p>
             </div>
 
@@ -104,7 +110,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                 {view === 'login' && (
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">{t('email')}</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
@@ -120,9 +126,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                         </div>
                         <div>
                             <div className="flex justify-between items-center mb-1">
-                                <label className="block text-sm font-medium text-slate-400">Password</label>
+                                <label className="block text-sm font-medium text-slate-400">{t('password')}</label>
                                 <button type="button" onClick={() => switchView('forgot-password')} className="text-xs text-indigo-400 hover:text-indigo-300">
-                                    Forgot password?
+                                    {t('resetPassword')}
                                 </button>
                             </div>
                             <div className="relative">
@@ -133,7 +139,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-10 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                    placeholder="••••••••"
+                                    placeholder="********"
                                     autoComplete="current-password"
                                 />
                                 <button
@@ -146,11 +152,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                                 </button>
                             </div>
                         </div>
-                        <Button type="submit" className="w-full py-2.5">Sign In</Button>
+                        <Button type="submit" className="w-full py-2.5">{t('login')}</Button>
                         <div className="text-center mt-4">
                             <span className="text-slate-400 text-sm">Don't have an account? </span>
                             <button type="button" onClick={() => switchView('signup')} className="text-indigo-400 hover:text-indigo-300 text-sm font-medium">
-                                Sign up
+                                {t('signup')}
                             </button>
                         </div>
                     </form>
@@ -159,7 +165,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                 {view === 'signup' && (
                     <form onSubmit={handleSignup} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Full Name</label>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">{t('fullName')}</label>
                             <div className="relative">
                                 <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
@@ -174,7 +180,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">{t('email')}</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
@@ -189,7 +195,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Password</label>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">{t('password')}</label>
                             <div className="relative">
                                 <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
@@ -198,7 +204,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-10 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                    placeholder="••••••••"
+                                    placeholder="********"
                                     autoComplete="new-password"
                                 />
                                 <button
@@ -211,10 +217,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                                 </button>
                             </div>
                         </div>
-                        <Button type="submit" className="w-full py-2.5">Create Account</Button>
+                        <Button type="submit" className="w-full py-2.5">{t('createAccount')}</Button>
                         <div className="text-center mt-4">
                             <button type="button" onClick={() => switchView('login')} className="text-slate-400 hover:text-white text-sm flex items-center justify-center w-full gap-2">
-                                <ArrowLeft className="w-4 h-4" /> Back to Login
+                                <ArrowLeft className="w-4 h-4" /> {t('login')}
                             </button>
                         </div>
                     </form>
@@ -223,10 +229,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                 {view === 'forgot-password' && (
                     <form onSubmit={handleForgotPassword} className="space-y-4">
                         <div className="text-sm text-slate-400 mb-4">
-                            Enter your email address and we'll send you a link to reset your password.
+                            {t('resetPassword')}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">{t('email')}</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
@@ -240,10 +246,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin }) => {
                                 />
                             </div>
                         </div>
-                        <Button type="submit" className="w-full py-2.5">Send Reset Link</Button>
+                        <Button type="submit" className="w-full py-2.5">{t('resetPassword')}</Button>
                         <div className="text-center mt-4">
                              <button type="button" onClick={() => switchView('login')} className="text-slate-400 hover:text-white text-sm flex items-center justify-center w-full gap-2">
-                                <ArrowLeft className="w-4 h-4" /> Back to Login
+                                <ArrowLeft className="w-4 h-4" /> {t('login')}
                             </button>
                         </div>
                     </form>

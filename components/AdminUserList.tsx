@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { User } from '../types';
 import * as storageService from '../services/storageService';
 import { Button } from './Button';
-import { Check, X, Trash2, Shield, User as UserIcon, Clock } from 'lucide-react';
+import { Check, X, Trash2, Shield, User as UserIcon, Clock, KeyRound } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface AdminUserListProps {
   currentUser: User;
@@ -10,28 +11,41 @@ interface AdminUserListProps {
 
 export const AdminUserList: React.FC<AdminUserListProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const { t } = useI18n();
 
-  const refreshUsers = () => {
-    setUsers(storageService.getUsers());
+  const refreshUsers = async () => {
+    const all = await storageService.getUsers();
+    setUsers(all);
   };
 
   useEffect(() => {
     refreshUsers();
   }, []);
 
-  const handleStatusChange = (userId: string, status: 'approved' | 'rejected') => {
-    storageService.updateUserStatus(userId, status);
-    refreshUsers();
+  const handleStatusChange = async (userId: string, status: 'approved' | 'rejected') => {
+    await storageService.updateUserStatus(userId, status);
+    await refreshUsers();
   };
 
-  const handleDelete = (userId: string) => {
+  const handleDelete = async (userId: string) => {
     if (confirm('Are you sure you want to delete this user? This cannot be undone.')) {
         try {
-            storageService.deleteUser(userId);
-            refreshUsers();
+            await storageService.deleteUser(userId);
+            await refreshUsers();
         } catch (e: any) {
             alert(e.message);
         }
+    }
+  };
+
+  const handleResetPassword = async (userId: string, email: string) => {
+    const newPass = prompt(`Set a new password for ${email}`);
+    if (!newPass) return;
+    try {
+      await storageService.adminSetPassword(userId, newPass);
+      alert('Password updated');
+    } catch (e: any) {
+      alert(e.message || 'Failed to update password');
     }
   };
 
@@ -49,7 +63,7 @@ export const AdminUserList: React.FC<AdminUserListProps> = ({ currentUser }) => 
 
     return (
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[status]}`}>
-            {icons[status]} {status.charAt(0).toUpperCase() + status.slice(1)}
+            {icons[status]} {t(status)}
         </span>
     );
   };
@@ -59,20 +73,20 @@ export const AdminUserList: React.FC<AdminUserListProps> = ({ currentUser }) => 
         <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Shield className="w-5 h-5 text-indigo-500" />
-                User Management
+                {t('users')}
             </h2>
-            <p className="text-slate-400 text-sm mt-1">Manage access requests and user roles.</p>
+            <p className="text-slate-400 text-sm mt-1">{t('status')} &amp; password control</p>
         </div>
         
         <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
                 <thead className="bg-slate-800/50 text-slate-400">
                     <tr>
-                        <th className="px-6 py-3 font-medium">User</th>
-                        <th className="px-6 py-3 font-medium">Role</th>
-                        <th className="px-6 py-3 font-medium">Status</th>
+                        <th className="px-6 py-3 font-medium">{t('user')}</th>
+                        <th className="px-6 py-3 font-medium">{t('role')}</th>
+                        <th className="px-6 py-3 font-medium">{t('status')}</th>
                         <th className="px-6 py-3 font-medium">Date Joined</th>
-                        <th className="px-6 py-3 font-medium text-right">Actions</th>
+                        <th className="px-6 py-3 font-medium text-right">{t('actions')}</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
@@ -102,50 +116,63 @@ export const AdminUserList: React.FC<AdminUserListProps> = ({ currentUser }) => 
                             </td>
                             <td className="px-6 py-4 text-right">
                                 {user.id !== currentUser.id && user.email !== 'admin@portal.com' && (
-                                    <div className="flex items-center justify-end gap-2">
+                                    <div className="flex items-center justify-end gap-2 flex-wrap">
                                         {user.status === 'pending' && (
                                             <>
-                                                <button 
-                                                    onClick={() => handleStatusChange(user.id, 'approved')}
-                                                    className="p-1.5 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
-                                                    title="Approve"
+                                                <Button
+                                                  variant="secondary"
+                                                  className="h-9 px-3 text-sm"
+                                                  icon={<Check className="w-4 h-4" />}
+                                                  onClick={() => handleStatusChange(user.id, 'approved')}
                                                 >
-                                                    <Check className="w-4 h-4" />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleStatusChange(user.id, 'rejected')}
-                                                    className="p-1.5 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
-                                                    title="Reject"
+                                                  {t('approve')}
+                                                </Button>
+                                                <Button
+                                                  variant="ghost"
+                                                  className="h-9 px-3 text-sm text-amber-300"
+                                                  icon={<X className="w-4 h-4" />}
+                                                  onClick={() => handleStatusChange(user.id, 'rejected')}
                                                 >
-                                                    <X className="w-4 h-4" />
-                                                </button>
+                                                  {t('reject')}
+                                                </Button>
                                             </>
                                         )}
                                         {user.status === 'rejected' && (
-                                             <button 
-                                                onClick={() => handleStatusChange(user.id, 'approved')}
-                                                className="p-1.5 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
-                                                title="Re-activate"
-                                            >
-                                                <Check className="w-4 h-4" />
-                                            </button>
+                                             <Button
+                                               variant="secondary"
+                                               className="h-9 px-3 text-sm"
+                                               icon={<Check className="w-4 h-4" />}
+                                               onClick={() => handleStatusChange(user.id, 'approved')}
+                                             >
+                                               {t('reactivate')}
+                                             </Button>
                                         )}
                                          {user.status === 'approved' && (
-                                             <button 
-                                                onClick={() => handleStatusChange(user.id, 'rejected')}
-                                                className="p-1.5 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
-                                                title="Deactivate"
-                                            >
-                                                <X className="w-4 h-4" />
-                                            </button>
+                                             <Button
+                                               variant="ghost"
+                                               className="h-9 px-3 text-sm text-amber-300"
+                                               icon={<X className="w-4 h-4" />}
+                                               onClick={() => handleStatusChange(user.id, 'rejected')}
+                                             >
+                                               {t('deactivate')}
+                                             </Button>
                                         )}
-                                        <button 
-                                            onClick={() => handleDelete(user.id)}
-                                            className="p-1.5 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 transition-colors ml-2"
-                                            title="Delete User"
+                                        <Button
+                                          variant="secondary"
+                                          className="h-9 px-3 text-sm"
+                                          icon={<KeyRound className="w-4 h-4" />}
+                                          onClick={() => handleResetPassword(user.id, user.email)}
                                         >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                          {t('setPassword')}
+                                        </Button>
+                                        <Button
+                                          variant="danger"
+                                          className="h-9 px-3 text-sm"
+                                          icon={<Trash2 className="w-4 h-4" />}
+                                          onClick={() => handleDelete(user.id)}
+                                        >
+                                          {t('deleteUser')}
+                                        </Button>
                                     </div>
                                 )}
                             </td>

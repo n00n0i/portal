@@ -7,12 +7,15 @@ import { AddAppModal } from './components/AddAppModal';
 import { Button } from './components/Button';
 import { AuthScreens } from './components/AuthScreens';
 import { AdminUserList } from './components/AdminUserList';
-import { Plus, Settings, LayoutGrid, Search, X, LogOut, Users, UserCircle } from 'lucide-react';
+import { DesignSystem } from './components/DesignSystem';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { useI18n, Locale } from './i18n';
+import { Plus, Settings, LayoutGrid, Search, X, LogOut, Users, UserCircle, Palette, Mail, Globe, KeyRound } from 'lucide-react';
 
 const App: React.FC = () => {
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<'portal' | 'admin_users'>('portal');
+  const [currentView, setCurrentView] = useState<'portal' | 'admin_users' | 'design_system'>('portal');
 
   // App Data State
   const [apps, setApps] = useState<AppEntry[]>([]);
@@ -27,16 +30,24 @@ const App: React.FC = () => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const categoryInputRef = useRef<HTMLInputElement>(null);
+  const mailDevUrl =
+    (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_MAILDEV_URL : process.env.MAILDEV_URL) ||
+    'http://localhost:1080';
+  const { t, locale, setLocale } = useI18n();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
-    // Check for existing session
-    const user = storageService.getCurrentUser();
-    if (user) {
-        setCurrentUser(user);
-    }
-    // Load apps and categories on mount
-    setApps(storageService.getApps());
-    setCategories(storageService.getCategories());
+    (async () => {
+      const user = await storageService.getCurrentUser();
+      if (user) {
+          setCurrentUser(user);
+          setIsEditMode(user.role === 'admin');
+      }
+      const loadedApps = await storageService.getApps();
+      const loadedCats = await storageService.getCategories();
+      setApps(loadedApps);
+      setCategories(loadedCats);
+    })();
   }, []);
 
   useEffect(() => {
@@ -50,21 +61,26 @@ const App: React.FC = () => {
     setCurrentView('portal');
   };
 
-  const handleLogout = () => {
-    storageService.logout();
+  const handleLogout = async () => {
+    await storageService.logout();
     setCurrentUser(null);
     setIsEditMode(false);
     setCurrentView('portal');
   };
 
-  const handleAddApp = (data: CreateAppFormData) => {
+  const handleChangePasswordSubmit = async (current: string, next: string) => {
+    if (!currentUser) return;
+    await storageService.changePassword(currentUser.email, current, next);
+  };
+
+  const handleAddApp = async (data: CreateAppFormData) => {
     if (editingApp) {
         // Update existing
         const updated: AppEntry = {
             ...editingApp,
             ...data,
         };
-        const newApps = storageService.updateApp(updated);
+        const newApps = await storageService.updateApp(updated);
         setApps(newApps);
     } else {
         // Create new
@@ -75,21 +91,21 @@ const App: React.FC = () => {
             // If no image provided, generate a seeded one for consistency
             imageUrl: data.imageUrl || `https://picsum.photos/seed/${Date.now()}/400/200`
         };
-        const newApps = storageService.addApp(newApp);
+        const newApps = await storageService.addApp(newApp);
         setApps(newApps);
     }
     closeModal();
   };
 
-  const handleDeleteApp = (id: string) => {
-    const newApps = storageService.deleteApp(id);
+  const handleDeleteApp = async (id: string) => {
+    const newApps = await storageService.deleteApp(id);
     setApps(newApps);
   };
 
-  const submitNewCategory = () => {
+  const submitNewCategory = async () => {
     if (newCategoryName && newCategoryName.trim()) {
         const trimmed = newCategoryName.trim();
-        const newCats = storageService.addCategory(trimmed);
+        const newCats = await storageService.addCategory(trimmed);
         setCategories(newCats);
         setSelectedCategory(trimmed);
     }
@@ -106,10 +122,10 @@ const App: React.FC = () => {
       }
   };
 
-  const handleDeleteCategory = (cat: string) => {
+  const handleDeleteCategory = async (cat: string) => {
     // Using window.confirm explicitly
     if (window.confirm(`Are you sure you want to delete the category "${cat}"?`)) {
-        const newCats = storageService.deleteCategory(cat);
+        const newCats = await storageService.deleteCategory(cat);
         setCategories(newCats);
         if (selectedCategory === cat) {
             setSelectedCategory('All');
@@ -164,10 +180,10 @@ const App: React.FC = () => {
               <LayoutGrid className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">Portal</h1>
+              <h1 className="text-3xl font-bold text-white tracking-tight">{t('portal')}</h1>
               <div className="flex items-center gap-2 text-slate-400 text-sm">
-                 <span>Welcome, {currentUser.name}</span>
-                 {isAdmin && <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30">ADMIN</span>}
+                 <span>{t('welcome')}, {currentUser.name}</span>
+                 {isAdmin && <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30">{t('admin')}</span>}
               </div>
             </div>
           </div>
@@ -179,7 +195,7 @@ const App: React.FC = () => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                     <input 
                         type="text" 
-                        placeholder="Search apps..." 
+                        placeholder={t('searchApps')} 
                         className="bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none w-full lg:w-64 transition-all"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -191,45 +207,97 @@ const App: React.FC = () => {
 
             {/* Admin Controls */}
             {isAdmin && (
-                <>
-                    <Button 
-                        variant={currentView === 'admin_users' ? 'primary' : 'ghost'}
-                        onClick={() => {
-                            setCurrentView(currentView === 'admin_users' ? 'portal' : 'admin_users');
-                            setIsEditMode(false);
-                        }}
-                        icon={<Users className="w-4 h-4" />}
-                    >
-                        Users
-                    </Button>
+              <>
+                <Button
+                  variant={currentView === 'admin_users' ? 'secondary' : 'ghost'}
+                  onClick={() => setCurrentView('admin_users')}
+                  icon={<Users className="w-4 h-4" />}
+                  className="rounded-full px-4"
+                >
+                  {t('users')}
+                </Button>
 
-                    {currentView === 'portal' && (
-                        <Button 
-                            variant={isEditMode ? 'primary' : 'secondary'} 
-                            onClick={() => setIsEditMode(!isEditMode)}
-                            icon={<Settings className="w-4 h-4" />}
-                            className={isEditMode ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-950" : ""}
-                        >
-                        {isEditMode ? 'Done' : 'Manage'}
-                        </Button>
-                    )}
-                    
-                    {currentView === 'portal' && isEditMode && (
-                        <Button onClick={() => setIsModalOpen(true)} icon={<Plus className="w-4 h-4" />}>
-                        Add App
-                        </Button>
-                    )}
-                </>
+                <Button
+                  variant={currentView === 'design_system' ? 'secondary' : 'ghost'}
+                  onClick={() => setCurrentView('design_system')}
+                  icon={<Palette className="w-4 h-4" />}
+                  className="rounded-full px-4"
+                >
+                  {t('design')}
+                </Button>
+
+                {mailDevUrl && (
+                  <a
+                    href={mailDevUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-slate-100 hover:bg-white/10 transition"
+                  >
+                    <Mail className="w-4 h-4" />
+                    {t('maildev')}
+                  </a>
+                )}
+
+                {currentView === 'portal' && (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setIsEditMode(true);
+                      setIsModalOpen(true);
+                    }}
+                    icon={<Plus className="w-4 h-4" />}
+                    className="rounded-full px-5"
+                  >
+                    {t('addApp')}
+                  </Button>
+                )}
+              </>
             )}
 
-            <Button variant="ghost" onClick={handleLogout} className="text-red-400 hover:text-red-300 hover:bg-red-500/10">
-                <LogOut className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-full px-3 py-1.5">
+              <Globe className="w-4 h-4 text-slate-300" />
+              <select
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as Locale)}
+                className="bg-transparent text-slate-100 text-sm focus:outline-none"
+              >
+                <option value="en">EN</option>
+                <option value="th">TH</option>
+              </select>
+            </div>
           </div>
         </header>
 
+        {/* Account card */}
+        <div className="grid gap-4 mb-10">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-lg shadow-indigo-500/5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-600/20 text-indigo-200 flex items-center justify-center">
+                <UserCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-white font-semibold">{currentUser.name}</div>
+                <div className="text-slate-400 text-sm">{currentUser.email}</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {t('role')}: {isAdmin ? t('admin') : t('user')}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setShowChangePassword(true)} icon={<KeyRound className="w-4 h-4" />}>
+                {t('changePassword')}
+              </Button>
+              <Button variant="ghost" onClick={handleLogout} className="text-red-300 hover:text-red-200" icon={<LogOut className="w-4 h-4" />}>
+                {t('logout')}
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {currentView === 'admin_users' ? (
             <AdminUserList currentUser={currentUser} />
+        ) : currentView === 'design_system' ? (
+            <DesignSystem />
         ) : (
             <>
                 {/* Categories */}
@@ -342,6 +410,12 @@ const App: React.FC = () => {
         onSubmit={handleAddApp}
         initialData={editingApp}
         availableCategories={categories}
+      />
+
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onSubmit={handleChangePasswordSubmit}
       />
     </div>
   );

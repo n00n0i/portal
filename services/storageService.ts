@@ -1,10 +1,32 @@
-import { AppEntry, DEFAULT_CATEGORIES, User, UserRole, UserStatus, AuthResponse } from '../types';
+import { AppEntry, DEFAULT_CATEGORIES, User, UserStatus, AuthResponse } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 const STORAGE_KEY_APPS = 'portal_apps_v1';
 const STORAGE_KEY_CATEGORIES = 'portal_categories_v1';
 const STORAGE_KEY_USERS = 'portal_users_v1';
 const STORAGE_KEY_SESSION = 'portal_session_v1';
+
+const API_BASE = (
+  (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_BASE_URL : '') ||
+  process.env.API_BASE_URL ||
+  ''
+).replace(/\/+$/, '');
+const USE_API = Boolean(API_BASE);
+
+const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
+  if (!USE_API) {
+    throw new Error('API_BASE_URL not configured');
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data && data.message) || 'Request failed');
+  }
+  return data as T;
+};
 
 // --- Default Data ---
 
@@ -50,7 +72,7 @@ const DEFAULT_ADMIN: User = {
 
 // --- App Management ---
 
-export const getApps = (): AppEntry[] => {
+export const getApps = async (): Promise<AppEntry[]> => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_APPS);
     if (!stored) {
@@ -64,7 +86,7 @@ export const getApps = (): AppEntry[] => {
   }
 };
 
-export const saveApps = (apps: AppEntry[]): void => {
+export const saveApps = async (apps: AppEntry[]): Promise<void> => {
   try {
     localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(apps));
   } catch (e) {
@@ -72,30 +94,30 @@ export const saveApps = (apps: AppEntry[]): void => {
   }
 };
 
-export const addApp = (app: AppEntry): AppEntry[] => {
-  const current = getApps();
+export const addApp = async (app: AppEntry): Promise<AppEntry[]> => {
+  const current = await getApps();
   const updated = [app, ...current];
-  saveApps(updated);
+  await saveApps(updated);
   return updated;
 };
 
-export const deleteApp = (id: string): AppEntry[] => {
-  const current = getApps();
+export const deleteApp = async (id: string): Promise<AppEntry[]> => {
+  const current = await getApps();
   const updated = current.filter(app => app.id !== id);
-  saveApps(updated);
+  await saveApps(updated);
   return updated;
 };
 
-export const updateApp = (updatedApp: AppEntry): AppEntry[] => {
-  const current = getApps();
+export const updateApp = async (updatedApp: AppEntry): Promise<AppEntry[]> => {
+  const current = await getApps();
   const updated = current.map(app => app.id === updatedApp.id ? updatedApp : app);
-  saveApps(updated);
+  await saveApps(updated);
   return updated;
 };
 
 // --- Category Management ---
 
-export const getCategories = (): string[] => {
+export const getCategories = async (): Promise<string[]> => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_CATEGORIES);
     if (!stored) {
@@ -108,7 +130,7 @@ export const getCategories = (): string[] => {
   }
 };
 
-export const saveCategories = (categories: string[]): void => {
+export const saveCategories = async (categories: string[]): Promise<void> => {
   try {
     localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
   } catch (e) {
@@ -116,44 +138,74 @@ export const saveCategories = (categories: string[]): void => {
   }
 };
 
-export const addCategory = (category: string): string[] => {
-  const current = getCategories();
+export const addCategory = async (category: string): Promise<string[]> => {
+  const current = await getCategories();
   if (current.includes(category)) return current;
   const updated = [...current, category];
-  saveCategories(updated);
+  await saveCategories(updated);
   return updated;
 };
 
-export const deleteCategory = (category: string): string[] => {
-  const current = getCategories();
+export const deleteCategory = async (category: string): Promise<string[]> => {
+  const current = await getCategories();
   const updated = current.filter(c => c !== category);
-  saveCategories(updated);
+  await saveCategories(updated);
   return updated;
 };
 
 // --- User Management & Auth ---
 
-export const getUsers = (): User[] => {
+const ensureDefaultAdmin = (users: User[]): User[] => {
+  // Guarantee root admin exists even if storage was modified/cleared incorrectly
+  const hasAdmin = users.some(u => u.email?.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase());
+  if (!hasAdmin && !USE_API) {
+    users.push(DEFAULT_ADMIN);
+  }
+  return users;
+};
+
+export const getUsers = async (): Promise<User[]> => {
+  if (USE_API) {
+    const data = await api<{ success: boolean; users: User[] }>('/api/users');
+    return data.users || [];
+  }
   try {
     const stored = localStorage.getItem(STORAGE_KEY_USERS);
     if (!stored) {
-      // Initialize with default admin
-      const users = [DEFAULT_ADMIN];
+      const users = ensureDefaultAdmin([]);
       localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
       return users;
     }
-    return JSON.parse(stored);
+    const parsed: User[] = JSON.parse(stored);
+    const withAdmin = ensureDefaultAdmin(parsed);
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(withAdmin));
+    return withAdmin;
   } catch (e) {
     return [DEFAULT_ADMIN];
   }
 };
 
-export const saveUsers = (users: User[]): void => {
+export const saveUsers = async (users: User[]): Promise<void> => {
   localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
 };
 
-export const login = (email: string, password: string): AuthResponse => {
-  const users = getUsers();
+export const login = async (email: string, password: string): Promise<AuthResponse> => {
+  if (USE_API) {
+    try {
+      const res = await api<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.success && res.user) {
+        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(res.user));
+      }
+      return res;
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Login failed' };
+    }
+  }
+
+  const users = await getUsers();
   const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
   if (!user) {
@@ -172,27 +224,36 @@ export const login = (email: string, password: string): AuthResponse => {
     return { success: false, message: 'Account has been deactivated.' };
   }
 
-  // Create Session
   localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(user));
   return { success: true, user };
 };
 
-export const logout = (): void => {
+export const logout = async (): Promise<void> => {
   localStorage.removeItem(STORAGE_KEY_SESSION);
 };
 
-export const getCurrentUser = (): User | null => {
+export const getCurrentUser = async (): Promise<User | null> => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_SESSION);
-    return stored ? JSON.parse(stored) : null;
+    return stored ? (JSON.parse(stored) as User) : null;
   } catch {
     return null;
   }
 };
 
-export const signup = (name: string, email: string, password: string): AuthResponse => {
-  const users = getUsers();
-  
+export const signup = async (name: string, email: string, password: string): Promise<AuthResponse> => {
+  if (USE_API) {
+    try {
+      return await api<AuthResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password }),
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Signup failed' };
+    }
+  }
+
+  const users = await getUsers();
   if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
     return { success: false, message: 'Email already exists.' };
   }
@@ -202,31 +263,95 @@ export const signup = (name: string, email: string, password: string): AuthRespo
     name,
     email,
     password,
-    role: 'user', // Default role
-    status: 'pending', // Default status
+    role: 'user',
+    status: 'pending',
     createdAt: Date.now(),
   };
 
   users.push(newUser);
-  saveUsers(users);
+  await saveUsers(users);
 
   return { success: true, message: 'Account created. Please wait for admin approval.' };
 };
 
-export const updateUserStatus = (userId: string, status: UserStatus): void => {
-  const users = getUsers();
+export const updateUserStatus = async (userId: string, status: UserStatus): Promise<void> => {
+  if (USE_API) {
+    await api('/api/users/' + userId + '/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    return;
+  }
+  const users = await getUsers();
   const updated = users.map(u => u.id === userId ? { ...u, status } : u);
-  saveUsers(updated);
+  await saveUsers(updated);
 };
 
-export const deleteUser = (userId: string): void => {
-  const users = getUsers();
-  // Prevent deleting self or the last admin
+export const deleteUser = async (userId: string): Promise<void> => {
+  if (USE_API) {
+    await api('/api/users/' + userId, { method: 'DELETE' });
+    return;
+  }
+  const users = await getUsers();
   const userToDelete = users.find(u => u.id === userId);
   if (userToDelete?.email === 'admin@portal.com') {
       throw new Error("Cannot delete the root admin.");
   }
   
   const updated = users.filter(u => u.id !== userId);
-  saveUsers(updated);
+  await saveUsers(updated);
+};
+
+export const resetPassword = async (email: string): Promise<{ success: boolean; message: string; tempPassword?: string }> => {
+  if (USE_API) {
+    try {
+      const res = await api<{ success: boolean; message: string; tempPassword?: string }>('/api/auth/forgot', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return res;
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Could not reset password.' };
+    }
+  }
+  const users = await getUsers();
+  const idx = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+  if (idx === -1) {
+    return { success: false, message: 'No account found for that email.' };
+  }
+  const tempPassword = Math.random().toString(36).slice(-10);
+  users[idx] = { ...users[idx], password: tempPassword };
+  await saveUsers(users);
+  return { success: true, message: 'Temporary password generated.', tempPassword };
+};
+
+export const changePassword = async (email: string, currentPassword: string, newPassword: string) => {
+  if (USE_API) {
+    return api('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, currentPassword, newPassword }),
+    });
+  }
+  const users = await getUsers();
+  const idx = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+  if (idx === -1) throw new Error('User not found');
+  if (users[idx].password !== currentPassword) throw new Error('Current password incorrect');
+  users[idx] = { ...users[idx], password: newPassword };
+  await saveUsers(users);
+  return { success: true };
+};
+
+export const adminSetPassword = async (userId: string, newPassword: string) => {
+  if (USE_API) {
+    return api('/api/users/' + userId + '/password', {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    });
+  }
+  const users = await getUsers();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx === -1) throw new Error('User not found');
+  users[idx] = { ...users[idx], password: newPassword };
+  await saveUsers(users);
+  return { success: true };
 };

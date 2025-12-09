@@ -34,11 +34,12 @@ export type UserStatus = 'pending' | 'approved' | 'rejected';
 export interface User {
   id: string;
   email: string;
-  password: string; // In a real app, this would be hashed. Storing plain for demo.
+  password?: string; // optional in API responses
   name: string;
   role: UserRole;
   status: UserStatus;
   createdAt: number;
+  isVerified?: boolean;
 }
 
 export interface AuthResponse {

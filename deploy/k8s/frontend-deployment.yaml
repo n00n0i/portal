@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal-frontend
+  template:
+    metadata:
+      labels:
+        app: portal-frontend
+    spec:
+      containers:
+        - name: portal-frontend
+          image: portal-frontend:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: NODE_ENV
+              value: production
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
