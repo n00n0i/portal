@@ -8,6 +8,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config({ path: '.env.local' });
 const promise_1 = __importDefault(require("mysql2/promise"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const uuid_1 = require("uuid");
 const { MYSQL_HOST = 'localhost', MYSQL_PORT = '3306', MYSQL_DATABASE = 'portal', MYSQL_USER = 'portal', MYSQL_PASSWORD = 'portalpass', } = process.env;
 exports.pool = promise_1.default.createPool({
     host: MYSQL_HOST,
@@ -45,6 +46,67 @@ const initDb = async () => {
         }
         catch (e) {
             // Column exists
+        }
+        await conn.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        created_at BIGINT NOT NULL,
+        INDEX idx_category_name (name)
+      )
+    `);
+        await conn.query(`
+      CREATE TABLE IF NOT EXISTS apps (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        url TEXT NOT NULL,
+        description TEXT,
+        image_url TEXT,
+        category VARCHAR(255) NOT NULL,
+        created_at BIGINT NOT NULL,
+        INDEX idx_category (category),
+        INDEX idx_app_created_at (created_at)
+      )
+    `);
+        const defaultCategories = ['Work', 'Social', 'Development', 'Media', 'Other'];
+        await Promise.all(defaultCategories.map((cat) => conn.query(`INSERT IGNORE INTO categories (id, name, created_at) VALUES (?, ?, ?)`, [
+            (0, uuid_1.v4)(),
+            cat,
+            Date.now(),
+        ])));
+        const [appCountRows] = await conn.query(`SELECT COUNT(*) as cnt FROM apps`);
+        const appCount = appCountRows[0]?.cnt ?? 0;
+        if (appCount === 0) {
+            const seededAt = Date.now();
+            const defaultApps = [
+                {
+                    name: 'GitHub',
+                    url: 'https://github.com',
+                    description: 'Where the world builds software.',
+                    category: 'Development',
+                    imageUrl: 'https://picsum.photos/seed/github/400/200',
+                    createdAt: seededAt,
+                },
+                {
+                    name: 'YouTube',
+                    url: 'https://youtube.com',
+                    description: 'Enjoy the videos and music you love.',
+                    category: 'Media',
+                    imageUrl: 'https://picsum.photos/seed/youtube/400/200',
+                    createdAt: seededAt - 1000,
+                },
+                {
+                    name: 'Gmail',
+                    url: 'https://mail.google.com',
+                    description: 'Secure, smart, and easy to use email.',
+                    category: 'Work',
+                    imageUrl: 'https://picsum.photos/seed/gmail/400/200',
+                    createdAt: seededAt - 2000,
+                },
+            ];
+            for (const app of defaultApps) {
+                await conn.query(`INSERT INTO apps (id, name, url, description, image_url, category, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [(0, uuid_1.v4)(), app.name, app.url, app.description, app.imageUrl, app.category, app.createdAt]);
+            }
         }
         // seed root admin if missing
         const [rows] = await conn.query(`SELECT id FROM users WHERE email = ? LIMIT 1`, ['admin@portal.com']);

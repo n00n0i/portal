@@ -36,6 +36,9 @@ cp .env.local.example .env.local
 Edit `.env.local` with your settings:
 ```env
 GEMINI_API_KEY=your-api-key-here
+API_BASE_URL=http://localhost:4000
+VITE_API_BASE_URL=http://localhost:4000
+API_PORT=4000
 MYSQL_PASSWORD=portalpass
 MYSQL_ROOT_PASSWORD=rootpass
 ```
@@ -48,7 +51,7 @@ docker compose up
 This starts:
 - **Frontend**: http://localhost:3000
 - **API**: http://localhost:4000
-- **MailDev**: http://localhost:1080
+- **MailDev**: Configure `VITE_MAILDEV_URL` (default http://localhost:1080)
 - **MySQL**: localhost:3306
 
 ### 3. Default Login
@@ -78,6 +81,8 @@ docker run -p 4000:4000 \
   -e MYSQL_HOST=mysql \
   -e MYSQL_USER=portal \
   -e MYSQL_PASSWORD=portalpass \
+  -e API_BASE_URL=http://localhost:4000 \
+  -e API_PUBLIC_URL=http://localhost:4000 \
   n00n0i/portal-api:latest
 ```
 
@@ -97,9 +102,10 @@ docker run -p 3306:3306 \
   n00n0i/portal-mysql:latest
 ```
 
-**Note**: Schema and tables are auto-created on first run. Admin user is pre-seeded:
+**Note**: Schema and tables (users, apps, categories) are auto-created on first run. Admin user is pre-seeded:
 - Email: `admin@portal.com`
 - Password: `admin`
+All portal data now persists in MySQL; the browser only keeps lightweight client preferences (e.g., locale).
 
 ---
 
@@ -201,6 +207,7 @@ Services auto-reload on code changes via volume mounts.
 
 ### Frontend
 - `GEMINI_API_KEY`: Google Gemini API key for auto-generating app descriptions
+- `VITE_MAILDEV_URL`: MailDev web UI link shown in the admin header
 
 ### API
 - `MYSQL_HOST`: MySQL host (default: mysql)
@@ -208,6 +215,9 @@ Services auto-reload on code changes via volume mounts.
 - `MYSQL_DATABASE`: Database name (default: portal)
 - `MYSQL_USER`: Database user (default: portal)
 - `MYSQL_PASSWORD`: Database password
+- `API_BASE_URL`: Base URL used by the API (e.g., http://localhost:4000)
+- `API_PUBLIC_URL`: Public URL used in emails/links
+- `VITE_API_BASE_URL`: Frontend base URL for calling the API
 - `SMTP_HOST`: SMTP server for email (optional)
 - `SMTP_PORT`: SMTP port (default: 1025)
 - `SMTP_USER`: SMTP username (optional)
@@ -236,7 +246,7 @@ Services auto-reload on code changes via volume mounts.
 ### Email not working
 - MailDev is for testing only - not production ready
 - Check SMTP settings in `.env.local`
-- Access MailDev UI at http://localhost:1080
+- Access MailDev UI at `VITE_MAILDEV_URL`
 
 ---
 

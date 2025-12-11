@@ -27,6 +27,16 @@ type UserRow = {
   created_at: number;
 };
 
+type AppRow = {
+  id: string;
+  name: string;
+  url: string;
+  description?: string | null;
+  image_url?: string | null;
+  category: string;
+  created_at: number;
+};
+
 const toUserDto = (row: UserRow) => ({
   id: row.id,
   name: row.name,
@@ -36,6 +46,25 @@ const toUserDto = (row: UserRow) => ({
   isVerified: !!row.is_verified,
   createdAt: row.created_at,
 });
+
+const toAppDto = (row: AppRow) => ({
+  id: row.id,
+  name: row.name,
+  url: row.url,
+  description: row.description || '',
+  imageUrl: row.image_url || '',
+  category: row.category,
+  createdAt: row.created_at,
+});
+
+const ensureCategoryExists = async (category: string) => {
+  if (!category) return;
+  await pool.query(`INSERT IGNORE INTO categories (id, name, created_at) VALUES (?, ?, ?)`, [
+    uuidv4(),
+    category,
+    Date.now(),
+  ]);
+};
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -231,6 +260,124 @@ app.delete('/api/users/:id', async (req, res) => {
   } catch (err) {
     console.error('Delete user error', err);
     res.status(500).json({ success: false, message: 'Failed to delete user' });
+  }
+});
+
+app.get('/api/apps', async (_req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT * FROM apps ORDER BY created_at DESC`);
+    res.json({ success: true, apps: (rows as AppRow[]).map(toAppDto) });
+  } catch (err) {
+    console.error('List apps error', err);
+    res.status(500).json({ success: false, message: 'Failed to list apps' });
+  }
+});
+
+app.post('/api/apps', async (req, res) => {
+  const { name, url, description, imageUrl, category } = req.body || {};
+  if (!name || !url || !category) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+  try {
+    const app: AppRow = {
+      id: uuidv4(),
+      name,
+      url,
+      description: description || '',
+      image_url: imageUrl || '',
+      category,
+      created_at: Date.now(),
+    };
+
+    await ensureCategoryExists(category);
+    await pool.query(
+      `INSERT INTO apps (id, name, url, description, image_url, category, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [app.id, app.name, app.url, app.description, app.image_url, app.category, app.created_at]
+    );
+
+    res.json({ success: true, app: toAppDto(app) });
+  } catch (err) {
+    console.error('Create app error', err);
+    res.status(500).json({ success: false, message: 'Failed to create app' });
+  }
+});
+
+app.put('/api/apps/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, url, description, imageUrl, category } = req.body || {};
+  if (!name || !url || !category) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+  try {
+    const [existingRows] = await pool.query(`SELECT id FROM apps WHERE id = ? LIMIT 1`, [id]);
+    const existing = (existingRows as any[])[0];
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'App not found' });
+    }
+
+    await ensureCategoryExists(category);
+    await pool.query(
+      `UPDATE apps SET name = ?, url = ?, description = ?, image_url = ?, category = ? WHERE id = ?`,
+      [name, url, description || '', imageUrl || '', category, id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update app error', err);
+    res.status(500).json({ success: false, message: 'Failed to update app' });
+  }
+});
+
+app.delete('/api/apps/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query(`DELETE FROM apps WHERE id = ?`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete app error', err);
+    res.status(500).json({ success: false, message: 'Failed to delete app' });
+  }
+});
+
+app.get('/api/categories', async (_req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT name FROM categories ORDER BY name ASC`);
+    const categories = (rows as any[]).map((r) => r.name);
+    res.json({ success: true, categories });
+  } catch (err) {
+    console.error('List categories error', err);
+    res.status(500).json({ success: false, message: 'Failed to list categories' });
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  const { name } = req.body || {};
+  if (!name) {
+    return res.status(400).json({ success: false, message: 'Category name required' });
+  }
+  try {
+    await ensureCategoryExists(name);
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'Category already exists' });
+    }
+    console.error('Create category error', err);
+    res.status(500).json({ success: false, message: 'Failed to create category' });
+  }
+});
+
+app.delete('/api/categories/:name', async (req, res) => {
+  const { name } = req.params;
+  if (!name) {
+    return res.status(400).json({ success: false, message: 'Category name required' });
+  }
+  try {
+    await pool.query(`DELETE FROM categories WHERE name = ?`, [name]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete category error', err);
+    res.status(500).json({ success: false, message: 'Failed to delete category' });
   }
 });
 

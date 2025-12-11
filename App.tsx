@@ -31,8 +31,9 @@ const App: React.FC = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const categoryInputRef = useRef<HTMLInputElement>(null);
   const mailDevUrl =
-    (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_MAILDEV_URL : process.env.MAILDEV_URL) ||
-    'http://localhost:1080';
+    (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_MAILDEV_URL : undefined) ||
+    (typeof process !== 'undefined' ? process.env?.VITE_MAILDEV_URL || process.env?.MAILDEV_URL : undefined) ||
+    '';
   const { t, locale, setLocale } = useI18n();
   const [showChangePassword, setShowChangePassword] = useState(false);
 

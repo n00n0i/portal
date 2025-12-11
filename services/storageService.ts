@@ -1,10 +1,8 @@
 import { AppEntry, DEFAULT_CATEGORIES, User, UserStatus, AuthResponse } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
-const STORAGE_KEY_APPS = 'portal_apps_v1';
-const STORAGE_KEY_CATEGORIES = 'portal_categories_v1';
-const STORAGE_KEY_USERS = 'portal_users_v1';
 const STORAGE_KEY_SESSION = 'portal_session_v1';
+const STORAGE_KEY_USERS = 'portal_users_v1';
 
 const API_BASE = (
   (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_BASE_URL : '') ||
@@ -28,38 +26,6 @@ const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   return data as T;
 };
 
-// --- Default Data ---
-
-const DEFAULT_APPS: AppEntry[] = [
-  {
-    id: '1',
-    name: 'GitHub',
-    url: 'https://github.com',
-    description: 'Where the world builds software.',
-    category: 'Development',
-    imageUrl: 'https://picsum.photos/seed/github/400/200',
-    createdAt: Date.now(),
-  },
-  {
-    id: '2',
-    name: 'YouTube',
-    url: 'https://youtube.com',
-    description: 'Enjoy the videos and music you love.',
-    category: 'Media',
-    imageUrl: 'https://picsum.photos/seed/youtube/400/200',
-    createdAt: Date.now() - 1000,
-  },
-  {
-    id: '3',
-    name: 'Gmail',
-    url: 'https://mail.google.com',
-    description: 'Secure, smart, and easy to use email.',
-    category: 'Work',
-    imageUrl: 'https://picsum.photos/seed/gmail/400/200',
-    createdAt: Date.now() - 2000,
-  }
-];
-
 const DEFAULT_ADMIN: User = {
   id: 'admin-001',
   email: 'admin@portal.com',
@@ -73,84 +39,97 @@ const DEFAULT_ADMIN: User = {
 // --- App Management ---
 
 export const getApps = async (): Promise<AppEntry[]> => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_APPS);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(DEFAULT_APPS));
-      return DEFAULT_APPS;
-    }
-    return JSON.parse(stored);
-  } catch (e) {
-    console.error('Failed to parse apps from storage', e);
-    return DEFAULT_APPS;
+  if (USE_API) {
+    const res = await api<{ success: boolean; apps: AppEntry[] }>('/api/apps');
+    return res.apps || [];
   }
-};
 
-export const saveApps = async (apps: AppEntry[]): Promise<void> => {
-  try {
-    localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(apps));
-  } catch (e) {
-    console.error('Failed to save apps to storage', e);
-  }
+  // Fallback for local/dev without API (non-prod only)
+  console.warn('API_BASE_URL not configured. Using in-memory defaults for apps.');
+  return [];
 };
 
 export const addApp = async (app: AppEntry): Promise<AppEntry[]> => {
-  const current = await getApps();
-  const updated = [app, ...current];
-  await saveApps(updated);
-  return updated;
+  if (USE_API) {
+    await api<{ success: boolean; app: AppEntry }>('/api/apps', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: app.name,
+        url: app.url,
+        description: app.description,
+        imageUrl: app.imageUrl,
+        category: app.category,
+      }),
+    });
+    return getApps();
+  }
+
+  console.warn('API_BASE_URL not configured. Skipping addApp.');
+  return [];
 };
 
 export const deleteApp = async (id: string): Promise<AppEntry[]> => {
-  const current = await getApps();
-  const updated = current.filter(app => app.id !== id);
-  await saveApps(updated);
-  return updated;
+  if (USE_API) {
+    await api('/api/apps/' + id, { method: 'DELETE' });
+    return getApps();
+  }
+
+  console.warn('API_BASE_URL not configured. Skipping deleteApp.');
+  return [];
 };
 
 export const updateApp = async (updatedApp: AppEntry): Promise<AppEntry[]> => {
-  const current = await getApps();
-  const updated = current.map(app => app.id === updatedApp.id ? updatedApp : app);
-  await saveApps(updated);
-  return updated;
+  if (USE_API) {
+    await api('/api/apps/' + updatedApp.id, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: updatedApp.name,
+        url: updatedApp.url,
+        description: updatedApp.description,
+        imageUrl: updatedApp.imageUrl,
+        category: updatedApp.category,
+      }),
+    });
+    return getApps();
+  }
+
+  console.warn('API_BASE_URL not configured. Skipping updateApp.');
+  return [];
 };
 
 // --- Category Management ---
 
 export const getCategories = async (): Promise<string[]> => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_CATEGORIES);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
-      return DEFAULT_CATEGORIES;
-    }
-    return JSON.parse(stored);
-  } catch (e) {
-    return DEFAULT_CATEGORIES;
+  if (USE_API) {
+    const res = await api<{ success: boolean; categories: string[] }>('/api/categories');
+    return res.categories || [];
   }
-};
 
-export const saveCategories = async (categories: string[]): Promise<void> => {
-  try {
-    localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
-  } catch (e) {
-    console.error('Failed to save categories', e);
-  }
+  console.warn('API_BASE_URL not configured. Using default categories.');
+  return DEFAULT_CATEGORIES;
 };
 
 export const addCategory = async (category: string): Promise<string[]> => {
-  const current = await getCategories();
-  if (current.includes(category)) return current;
-  const updated = [...current, category];
-  await saveCategories(updated);
-  return updated;
+  if (USE_API) {
+    await api('/api/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name: category }),
+    });
+    return getCategories();
+  }
+
+  console.warn('API_BASE_URL not configured. Skipping addCategory.');
+  return DEFAULT_CATEGORIES;
 };
 
 export const deleteCategory = async (category: string): Promise<string[]> => {
-  const current = await getCategories();
-  const updated = current.filter(c => c !== category);
-  await saveCategories(updated);
-  return updated;
+  if (USE_API) {
+    await api('/api/categories/' + encodeURIComponent(category), { method: 'DELETE' });
+    return getCategories();
+  }
+
+  console.warn('API_BASE_URL not configured. Skipping deleteCategory.');
+  return DEFAULT_CATEGORIES;
 };
 
 // --- User Management & Auth ---

@@ -18,7 +18,7 @@ docker compose up
 **Access:**
 - 🌐 Frontend: http://localhost:3000
 - 🔧 API: http://localhost:4000
-- 📧 MailDev: http://localhost:1080
+- 📧 MailDev: set `VITE_MAILDEV_URL` (default http://localhost:1080)
 
 ### Option 2: Local Development
 ```bash
@@ -120,12 +120,16 @@ SMTP_PORT=1025
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=portal@example.com
+VITE_MAILDEV_URL=http://localhost:1080
 
 # API Server
 API_PORT=4000
 API_PUBLIC_URL=http://localhost:4000
-API_BASE_URL=http://api:4000
+API_BASE_URL=http://localhost:4000
+VITE_API_BASE_URL=http://localhost:4000
 ```
+
+The frontend calls the API using `VITE_API_BASE_URL`; all users, apps, and categories persist in MySQL (seeded on first run). LocalStorage is only used for lightweight client state like locale selection.
 
 ---
 
@@ -322,6 +326,17 @@ User Management:
   PATCH  /api/users/:id/status   { status } (admin only)
   DELETE /api/users/:id          (admin only)
   POST   /api/users/:id/password { newPassword } (admin only)
+
+Apps:
+  GET    /api/apps
+  POST   /api/apps               { name, url, description?, imageUrl?, category }
+  PUT    /api/apps/:id           { name, url, description?, imageUrl?, category }
+  DELETE /api/apps/:id
+
+Categories:
+  GET    /api/categories
+  POST   /api/categories         { name }
+  DELETE /api/categories/:name
 ```
 
 ---
