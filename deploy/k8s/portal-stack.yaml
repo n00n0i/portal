@@ -1,0 +1,269 @@
+﻿# Portal full stack manifests for Kubernetes
+# Update placeholders before applying: GEMINI_API_KEY, <EXTERNAL-HOST>, SMTP_* if needed
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: portal
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: portal-secrets
+  namespace: portal
+type: Opaque
+stringData:
+  GEMINI_API_KEY: "<FIXME-GEMINI-API-KEY>"
+  MYSQL_PASSWORD: "portalpass"
+  MYSQL_ROOT_PASSWORD: "rootpass"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smtp-config
+  namespace: portal
+type: Opaque
+stringData:
+  SMTP_HOST: "maildev"
+  SMTP_USER: ""
+  SMTP_PASS: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: portal
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal-mysql
+  namespace: portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal-mysql
+  template:
+    metadata:
+      labels:
+        app: portal-mysql
+    spec:
+      containers:
+        - name: mysql
+          image: n00n0i/portal-mysql:latest
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_DATABASE
+              value: "portal"
+            - name: MYSQL_USER
+              value: "portal"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secrets
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secrets
+                  key: MYSQL_ROOT_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal-mysql
+  namespace: portal
+spec:
+  type: ClusterIP
+  selector:
+    app: portal-mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal-api
+  namespace: portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal-api
+  template:
+    metadata:
+      labels:
+        app: portal-api
+    spec:
+      containers:
+        - name: api
+          image: n00n0i/portal-api:latest
+          ports:
+            - containerPort: 4000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: MYSQL_HOST
+              value: portal-mysql
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_DATABASE
+              value: "portal"
+            - name: MYSQL_USER
+              value: "portal"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secrets
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secrets
+                  key: GEMINI_API_KEY
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-config
+                  key: SMTP_HOST
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-config
+                  key: SMTP_USER
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-config
+                  key: SMTP_PASS
+            - name: SMTP_PORT
+              value: "1025"
+            - name: SMTP_SECURE
+              value: "false"
+            - name: API_PORT
+              value: "4000"
+            - name: API_BASE_URL
+              value: "http://portal-api.portal.svc.cluster.local:4000"
+            - name: API_PUBLIC_URL
+              value: "http://<EXTERNAL-HOST>"
+            - name: VITE_API_BASE_URL
+              value: "http://<EXTERNAL-HOST>/api"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal-api
+  namespace: portal
+spec:
+  selector:
+    app: portal-api
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal-frontend
+  namespace: portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal-frontend
+  template:
+    metadata:
+      labels:
+        app: portal-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: n00n0i/portal-frontend:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: NODE_ENV
+              value: production
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal-frontend
+  namespace: portal
+spec:
+  type: ClusterIP
+  selector:
+    app: portal-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portal-ingress
+  namespace: portal
+spec:
+  rules:
+    - host: "<EXTERNAL-HOST>" # เช่น portal.example.com; ถ้าไม่มี host ปล่อยว่างและใช้ NodePort จาก ingress controller
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portal-frontend
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: portal-api
+                port:
+                  number: 4000
