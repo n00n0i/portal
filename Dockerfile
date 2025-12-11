@@ -8,7 +8,13 @@ RUN npm ci
 COPY . .
 
 ARG GEMINI_API_KEY
+ARG VITE_API_BASE_URL
+ARG VITE_MAILDEV_URL
+
+# Build-time env for Vite (values must be passed via --build-arg)
 ENV GEMINI_API_KEY=${GEMINI_API_KEY}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_MAILDEV_URL=${VITE_MAILDEV_URL}
 RUN npm run build
 
 # Runtime image - lightweight Alpine
